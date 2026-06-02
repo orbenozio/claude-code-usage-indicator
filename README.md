@@ -6,7 +6,7 @@ and when they reset) — so you never have to stop and type `/usage` again.
 
 ```
  …  Go Live   Ln 12, Col 4   Spaces: 2   UTF-8   ⟁ Claude 87%
-                                                  └─ click to refresh, hover for details
+                                                  └─ click for options, hover for details
 ```
 
 ## Features
@@ -14,8 +14,10 @@ and when they reset) — so you never have to stop and type `/usage` again.
 - **5-hour window at a glance** — your current rate-limit usage as a live percentage in the status bar.
 - **Rich tooltip** — hover to see both the 5-hour and weekly windows, each with a reset countdown
   in days / hours / minutes.
-- **Click to refresh** — one click re-checks immediately.
-- **Configurable** — refresh interval, status-bar label, and whether to show the weekly window too.
+- **Click for an options menu** — refresh, change refresh interval, show/hide the weekly window,
+  set the label, or open settings.
+- **Polls politely** — conservative default interval plus automatic back-off that honors the
+  endpoint's `Retry-After` if it rate-limits (HTTP 429).
 - **Read-only & safe** — it only *reads* your existing Claude credentials; it never modifies,
   refreshes, or transmits them anywhere except to Anthropic's own usage endpoint (the same one
   Claude Code uses).
@@ -25,55 +27,29 @@ and when they reset) — so you never have to stop and type `/usage` again.
 - **VS Code** 1.85 or newer.
 - **Claude Code** installed and **logged in** at least once on this machine — the indicator reads
   the OAuth token that Claude Code stores in `~/.claude/.credentials.json`. If you've never logged
-  in, or the token has expired, the indicator will say so and ask you to open Claude Code.
+  in, or the token has expired, the indicator says so and asks you to open Claude Code.
 
-> Currently verified on **Windows**. macOS/Linux support is on the roadmap (the token location and
-> a per-OS core binary still need to be wired up).
+> You do **not** need Go, Node, or any other toolchain to use the extension — it ships ready to run.
 
 ## Installation
 
-A packaged `.vsix` / Marketplace listing is planned. For now, build it from source:
+1. Download the latest `claude-code-usage-indicator-<version>.vsix` from the
+   [**Releases**](https://github.com/orbenozio/claude-code-usage-indicator/releases) page.
+2. In VS Code: open the **Extensions** view → `…` menu → **Install from VSIX…** → pick the file.
+   (Or from a terminal: `code --install-extension claude-code-usage-indicator-<version>.vsix`.)
+3. Reload the window. The indicator appears at the bottom-right of the status bar.
 
-### Prerequisites (build-time only)
-
-- [Go](https://go.dev/dl/) 1.23+ — to compile the core binary.
-- [Node.js](https://nodejs.org/) 18+ — to compile the extension.
-
-> End users who install a future packaged release will **not** need Go or Node — the core is
-> shipped as a prebuilt binary and the extension runs on VS Code's built-in runtime.
-
-### Build & run
-
-```bash
-# 1. Build the core
-cd core
-go build -o usage-core.exe .          # or: go build -o usage-core .   (macOS/Linux)
-
-# 2. Make the core available to the extension
-mkdir -p ../adapters/vscode/bin
-cp usage-core.exe ../adapters/vscode/bin/    # copy the binary you just built
-
-# 3. Build the extension
-cd ../adapters/vscode
-npm install
-npm run compile
-```
-
-Then open the repository folder in VS Code and press **F5** to launch an
-*Extension Development Host* with the indicator loaded. Look at the bottom-right of the status bar.
-
-To install it permanently, package it with [`vsce`](https://github.com/microsoft/vscode-vsce)
-(`npx vsce package`) and install the resulting `.vsix` via *Extensions → … → Install from VSIX*.
+> Verified on **Windows**. The `.vsix` also bundles prebuilt core binaries for macOS and Linux
+> (x64 + arm64), but those are not yet verified end-to-end — feedback welcome.
 
 ## Usage
 
-Once active, the indicator sits at the bottom-right of the VS Code status bar:
+The indicator sits at the bottom-right of the status bar:
 
 - **Hover** — full breakdown of the 5-hour and weekly windows and their reset times.
-- **Click** — refresh now.
-- **Command Palette** (`Ctrl/Cmd+Shift+P`):
-  - `Claude Usage: Refresh now`
-  - `Claude Usage: Set refresh interval`
+- **Click** — open the options menu (refresh, set interval, show/hide weekly, set label, settings).
+- **Command Palette** (`Ctrl/Cmd+Shift+P`): `Claude Usage: Open menu`, `Claude Usage: Refresh now`,
+  `Claude Usage: Set refresh interval`.
 
 ## Configuration
 
@@ -81,17 +57,18 @@ Settings (search "Claude Usage" in VS Code settings):
 
 | Setting | Default | Description |
 |---------|---------|-------------|
-| `claudeUsage.refreshIntervalSeconds` | `90` | How often to re-check usage. Values between 1 and the floor are raised to the floor (30 s) to avoid hammering the endpoint. `0` = manual refresh only. |
+| `claudeUsage.refreshIntervalSeconds` | `300` | How often to re-check usage. The endpoint enforces its own cooldown, so values below the floor (60 s) are raised to it; on HTTP 429 the extension backs off and honors `Retry-After`. `0` = manual refresh only. |
 | `claudeUsage.label` | `"Claude"` | Short text before the percentage (e.g. `Claude Code usage`, or empty for just the number). |
 | `claudeUsage.showWeekly` | `false` | Also show the weekly (7-day) window percentage in the status bar, not just the 5-hour one. |
-| `claudeUsage.corePath` | `""` | Absolute path to the `usage-core` binary. Leave empty to use the binary bundled in `bin/`. |
+| `claudeUsage.corePath` | `""` | Absolute path to a `usage-core` binary. Leave empty to use the bundled one. |
 
-The refresh interval can be changed on the fly via *Set refresh interval* — no window reload needed.
+The refresh interval can be changed on the fly from the click menu — no window reload needed.
 
 ## How it works
 
-A small shared **core** (a Go binary) does all the sensitive work; a thin **VS Code adapter**
-(TypeScript) just spawns it and renders the result.
+A small shared **core** (a Go binary, prebuilt per OS/arch) does all the sensitive work; a thin
+**VS Code adapter** (TypeScript) just spawns it and renders the result. The same core is meant to
+be reused by future hosts (JetBrains, a desktop tray) behind their own thin adapters.
 
 ```
 ~/.claude/.credentials.json ──── read-only ──▶  usage-core (Go)
@@ -102,31 +79,48 @@ api.anthropic.com/api/oauth/usage ◀── Bearer ──  • GET usage endpoin
                                           VS Code adapter renders it in the status bar
 ```
 
-### Safety
-
-The access token is the **same** one Claude Code itself uses. The core is strictly **read-only**
+**Safety.** The access token is the **same** one Claude Code uses. The core is strictly read-only
 on your credentials: it reads `accessToken` and never refreshes or rewrites the file. If the token
 is expired it degrades gracefully ("open Claude Code to refresh") rather than rotating it — which
-would break Claude Code's own auth. The token is sent only to Anthropic's official usage endpoint,
-nowhere else. The exact request/response is documented in [`docs/usage-endpoint.md`](docs/usage-endpoint.md).
+would break Claude Code's own auth. The token is sent only to Anthropic's official usage endpoint.
+The exact request/response is documented in [`docs/usage-endpoint.md`](docs/usage-endpoint.md).
 
 ## Roadmap
 
-- [x] **Phase 0** — validate the usage endpoint + freeze the response schema.
-- [x] **Phase 1** — Go core + VS Code status-bar indicator (the MVP).
-- [ ] **Phase 2** — package a `.vsix` / publish to the Marketplace; prebuilt core per OS/arch (Windows, macOS, Linux).
-- [ ] **Phase 3** — JetBrains (Rider / IntelliJ) status-bar widget reusing the same core.
-- [ ] **Phase 4** — optional shared daemon (one fetch/cache across hosts).
-- [ ] **Phase 5** — Claude Desktop tray app (Windows & macOS).
+- [x] Validate the usage endpoint and freeze the response schema.
+- [x] Go core + VS Code status-bar indicator (the MVP) — released as **v0.1.0**.
+- [ ] Verify macOS / Linux end-to-end.
+- [ ] Publish to the VS Code Marketplace (currently distributed as a `.vsix` via Releases).
+- [ ] JetBrains (Rider / IntelliJ) status-bar widget reusing the same core.
+- [ ] Optional shared daemon — one fetch/cache shared across hosts.
+- [ ] Claude Desktop tray app (Windows & macOS).
 
-The indicator intentionally lives in the **host's status bar**, not injected into the Claude Code
-panel itself.
+The indicator intentionally lives in the **host's status bar**, not injected into the Claude Code panel.
 
-## Contributing
+## Development
 
-Issues and PRs welcome. The core and the adapter are deliberately decoupled, so adding a new host
-(JetBrains, a tray app, …) means writing a new thin adapter against the same `usage-core` JSON
-contract — no need to touch the credential/endpoint logic.
+You only need these to *build* the project — not to use it.
+
+- [Go](https://go.dev/dl/) 1.23+ (compiles the core) and [Node.js](https://nodejs.org/) 18+ (compiles the extension).
+
+```bash
+# Build the core for your machine and make it available to the extension
+cd core
+go build -o ../adapters/vscode/bin/usage-core.exe .   # drop the .exe on macOS/Linux
+
+# Build the extension, then press F5 in VS Code to launch an Extension Development Host
+cd ../adapters/vscode
+npm install
+npm run compile
+```
+
+To produce binaries for **all** platforms at once, run `scripts/build-core.ps1` (outputs
+`usage-core-<platform>-<arch>` into the adapter's `bin/`). Package a `.vsix` with
+[`vsce`](https://github.com/microsoft/vscode-vsce): `npx @vscode/vsce package`.
+
+Issues and PRs welcome. The core and adapter are deliberately decoupled, so adding a new host means
+writing a thin adapter against the same `usage-core` JSON contract — no need to touch the
+credential/endpoint logic.
 
 ## License
 
