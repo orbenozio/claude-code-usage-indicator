@@ -3,8 +3,9 @@ import { execFile } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 
-/** Minimum allowed refresh interval, to avoid hammering the endpoint. */
-const FLOOR_SECONDS = 30;
+/** Minimum allowed refresh interval. The usage endpoint enforces its own
+ * cooldown (~2-3 min observed via Retry-After), so we keep the floor generous. */
+const FLOOR_SECONDS = 60;
 
 /** Normalized shape emitted by usage-core (see docs/usage-endpoint.md). */
 interface Window {
@@ -18,37 +19,42 @@ interface Usage {
   fetched_at: string;
   stale: boolean;
   error?: string;
+  retry_after?: number; // seconds; set by the core on HTTP 429
 }
+
+/** Cap on exponential backoff between polls after repeated failures. */
+const MAX_BACKOFF_MS = 15 * 60 * 1000;
 
 let statusItem: vscode.StatusBarItem;
 let timer: NodeJS.Timeout | undefined;
 let lastGood: Usage | undefined;
+let backoff = 0;            // consecutive failures
+let lastRetryAfterMs = 0;   // honored when the endpoint sends Retry-After
 
 export function activate(context: vscode.ExtensionContext) {
   statusItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
-  statusItem.command = 'claudeUsage.refresh';
+  statusItem.command = 'claudeUsage.menu';
   statusItem.text = '$(sync~spin) usage';
   statusItem.show();
   context.subscriptions.push(statusItem);
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('claudeUsage.refresh', () => refresh(context)),
+    vscode.commands.registerCommand('claudeUsage.menu', () => showMenu(context)),
+    vscode.commands.registerCommand('claudeUsage.refresh', () => startLoop(context)),
     vscode.commands.registerCommand('claudeUsage.setInterval', () => promptInterval()),
     vscode.workspace.onDidChangeConfiguration((e) => {
       if (e.affectsConfiguration('claudeUsage')) {
-        scheduleTimer(context);
-        refresh(context);
+        startLoop(context);
       }
     })
   );
 
-  refresh(context);
-  scheduleTimer(context);
+  startLoop(context);
 }
 
 export function deactivate() {
   if (timer) {
-    clearInterval(timer);
+    clearTimeout(timer);
   }
 }
 
@@ -56,17 +62,50 @@ function config() {
   return vscode.workspace.getConfiguration('claudeUsage');
 }
 
-function scheduleTimer(context: vscode.ExtensionContext) {
-  if (timer) {
-    clearInterval(timer);
-    timer = undefined;
-  }
+/** Base poll interval in ms, honoring the floor. 0 means manual-only. */
+function baseIntervalMs(): number {
   const raw = config().get<number>('refreshIntervalSeconds', 90);
   if (raw <= 0) {
-    return; // manual refresh only
+    return 0;
   }
-  const seconds = Math.max(raw, FLOOR_SECONDS);
-  timer = setInterval(() => refresh(context), seconds * 1000);
+  return Math.max(raw, FLOOR_SECONDS) * 1000;
+}
+
+/** (Re)start the poll loop: clear backoff, fetch now, then keep ticking. */
+function startLoop(context: vscode.ExtensionContext) {
+  if (timer) {
+    clearTimeout(timer);
+    timer = undefined;
+  }
+  backoff = 0;
+  lastRetryAfterMs = 0;
+  tick(context);
+}
+
+/** One fetch + schedule the next, applying exponential backoff on failure. */
+function tick(context: vscode.ExtensionContext) {
+  if (timer) {
+    clearTimeout(timer);
+    timer = undefined;
+  }
+  fetchOnce(context, (ok) => {
+    const base = baseIntervalMs();
+    if (base <= 0) {
+      return; // manual-only: don't auto-reschedule
+    }
+    let delay: number;
+    if (ok) {
+      backoff = 0;
+      delay = base;
+    } else {
+      backoff = Math.min(backoff + 1, 6);
+      delay = Math.min(base * Math.pow(2, backoff), MAX_BACKOFF_MS);
+      if (lastRetryAfterMs > delay) {
+        delay = Math.min(lastRetryAfterMs, MAX_BACKOFF_MS);
+      }
+    }
+    timer = setTimeout(() => tick(context), delay);
+  });
 }
 
 /** Resolve the core binary: explicit config first, then the bundled per-platform
@@ -87,18 +126,23 @@ function resolveCorePath(context: vscode.ExtensionContext): string {
   return context.asAbsolutePath(path.join('bin', `usage-core${ext}`));
 }
 
-function refresh(context: vscode.ExtensionContext): void {
+/** Run the core once, render the result, and report success/failure. */
+function fetchOnce(context: vscode.ExtensionContext, done: (ok: boolean) => void): void {
   const corePath = resolveCorePath(context);
   if (!fs.existsSync(corePath)) {
     statusItem.text = '$(error) usage';
     statusItem.tooltip = `Claude usage core not found at:\n${corePath}\n\nSet "claudeUsage.corePath" or bundle the binary in bin/.`;
     statusItem.backgroundColor = new vscode.ThemeColor('statusBarItem.errorBackground');
+    lastRetryAfterMs = 0;
+    done(false);
     return;
   }
 
   execFile(corePath, { timeout: 12000 }, (err, stdout) => {
     if (err && !stdout) {
       renderError(`failed to run core: ${err.message}`);
+      lastRetryAfterMs = 0;
+      done(false);
       return;
     }
     let usage: Usage;
@@ -106,9 +150,14 @@ function refresh(context: vscode.ExtensionContext): void {
       usage = JSON.parse(stdout) as Usage;
     } catch (e) {
       renderError(`bad core output: ${String(e)}`);
+      lastRetryAfterMs = 0;
+      done(false);
       return;
     }
+    lastRetryAfterMs = (usage.retry_after ?? 0) * 1000;
+    const ok = !usage.error && !!usage.five_hour;
     render(usage);
+    done(ok);
   });
 }
 
@@ -169,7 +218,7 @@ function buildTooltip(usage: Usage, stale: boolean, error?: string): vscode.Mark
   } else {
     lines.push(`_Updated ${untilReset(usage.fetched_at)}._`);
   }
-  lines.push('Click to refresh now.');
+  lines.push('Click for options (refresh, interval, …).');
   const md = new vscode.MarkdownString(lines.join('\n\n'));
   md.isTrusted = false;
   return md;
@@ -202,17 +251,17 @@ function untilReset(iso: string): string {
 async function promptInterval(): Promise<void> {
   const current = config().get<number>('refreshIntervalSeconds', 90);
   const picks: vscode.QuickPickItem[] = [
-    { label: '30 seconds', description: 'floor' },
-    { label: '60 seconds' },
-    { label: '90 seconds', description: 'default' },
-    { label: '5 minutes' },
+    { label: '1 minute', description: 'floor' },
+    { label: '2 minutes' },
+    { label: '5 minutes', description: 'default' },
+    { label: '10 minutes' },
     { label: 'Manual only (0)' }
   ];
   const map: Record<string, number> = {
-    '30 seconds': 30,
-    '60 seconds': 60,
-    '90 seconds': 90,
+    '1 minute': 60,
+    '2 minutes': 120,
     '5 minutes': 300,
+    '10 minutes': 600,
     'Manual only (0)': 0
   };
   const chosen = await vscode.window.showQuickPick(picks, {
@@ -222,4 +271,60 @@ async function promptInterval(): Promise<void> {
     return;
   }
   await config().update('refreshIntervalSeconds', map[chosen.label], vscode.ConfigurationTarget.Global);
+}
+
+/** Options menu opened by clicking the status-bar indicator. */
+type MenuItem = vscode.QuickPickItem & { run: () => void | Thenable<void> };
+
+async function showMenu(context: vscode.ExtensionContext): Promise<void> {
+  const cfg = config();
+  const weekly = cfg.get<boolean>('showWeekly', false);
+  const interval = cfg.get<number>('refreshIntervalSeconds', 90);
+  const label = cfg.get<string>('label', 'Claude');
+
+  const items: MenuItem[] = [
+    {
+      label: '$(sync) Refresh now',
+      run: () => startLoop(context)
+    },
+    {
+      label: '$(clock) Set refresh interval…',
+      description: interval > 0 ? `${interval}s` : 'manual',
+      run: () => promptInterval()
+    },
+    {
+      label: `$(eye) ${weekly ? 'Hide' : 'Show'} weekly window`,
+      description: weekly ? 'on' : 'off',
+      run: () => cfg.update('showWeekly', !weekly, vscode.ConfigurationTarget.Global)
+    },
+    {
+      label: '$(tag) Set label…',
+      description: label || '(none)',
+      run: () => promptLabel()
+    },
+    {
+      label: '$(gear) Open settings',
+      run: () => vscode.commands.executeCommand('workbench.action.openSettings', 'claudeUsage')
+    }
+  ];
+
+  const chosen = await vscode.window.showQuickPick(items, {
+    placeHolder: 'Claude Usage — choose an action'
+  });
+  if (chosen) {
+    await chosen.run();
+  }
+}
+
+async function promptLabel(): Promise<void> {
+  const current = config().get<string>('label', 'Claude');
+  const value = await vscode.window.showInputBox({
+    title: 'Claude Usage status-bar label',
+    prompt: 'Text shown before the percentage (leave empty for just the number).',
+    value: current
+  });
+  if (value === undefined) {
+    return; // cancelled
+  }
+  await config().update('label', value, vscode.ConfigurationTarget.Global);
 }

@@ -26,6 +26,10 @@
   "contributes": {
     "commands": [
       {
+        "command": "claudeUsage.menu",
+        "title": "Claude Usage: Open menu"
+      },
+      {
         "command": "claudeUsage.refresh",
         "title": "Claude Usage: Refresh now"
       },
@@ -39,9 +43,9 @@
       "properties": {
         "claudeUsage.refreshIntervalSeconds": {
           "type": "number",
-          "default": 90,
+          "default": 300,
           "minimum": 0,
-          "markdownDescription": "How often to re-check usage, in seconds. Values between 1 and the floor are raised to the floor (30 s) to avoid hammering the endpoint. `0` = manual refresh only."
+          "markdownDescription": "How often to re-check usage, in seconds. The endpoint enforces its own cooldown, so values between 1 and the floor are raised to the floor (60 s). On HTTP 429 the extension backs off automatically and honors `Retry-After`. `0` = manual refresh only."
         },
         "claudeUsage.corePath": {
           "type": "string",

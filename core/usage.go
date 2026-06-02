@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -48,9 +50,10 @@ type Usage struct {
 	ExtraUsage struct {
 		Enabled bool `json:"enabled"`
 	} `json:"extra_usage"`
-	FetchedAt string `json:"fetched_at"`
-	Stale     bool   `json:"stale"`
-	Error     string `json:"error,omitempty"`
+	FetchedAt  string `json:"fetched_at"`
+	Stale      bool   `json:"stale"`
+	Error      string `json:"error,omitempty"`
+	RetryAfter int    `json:"retry_after,omitempty"` // seconds, set on HTTP 429
 }
 
 // credentialsPath returns ~/.claude/.credentials.json for the current user.
@@ -82,11 +85,12 @@ func readAccessToken() (string, error) {
 	return c.ClaudeAiOauth.AccessToken, nil
 }
 
-// fetchUsage performs the single GET. Returns the parsed upstream body.
-func fetchUsage(token string, timeout time.Duration) (*rawUsage, error) {
+// fetchUsage performs the single GET. Returns the parsed upstream body, and a
+// retry-after hint in seconds (0 unless the endpoint rate-limited us with 429).
+func fetchUsage(token string, timeout time.Duration) (*rawUsage, int, error) {
 	req, err := http.NewRequest(http.MethodGet, usageEndpoint, nil)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("anthropic-beta", "oauth-2025-04-20")
@@ -95,25 +99,50 @@ func fetchUsage(token string, timeout time.Duration) (*rawUsage, error) {
 	client := &http.Client{Timeout: timeout}
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	if resp.StatusCode == http.StatusUnauthorized {
-		return nil, fmt.Errorf("unauthorized (token expired?) — open Claude Code to refresh")
+		return nil, 0, fmt.Errorf("unauthorized (token expired?) — open Claude Code to refresh")
+	}
+	if resp.StatusCode == http.StatusTooManyRequests {
+		retry := parseRetryAfter(resp.Header.Get("Retry-After"))
+		return nil, retry, fmt.Errorf("rate limited by the usage endpoint (HTTP 429) — backing off")
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("usage endpoint returned HTTP %d", resp.StatusCode)
+		return nil, 0, fmt.Errorf("usage endpoint returned HTTP %d", resp.StatusCode)
 	}
 	var ru rawUsage
 	if err := json.Unmarshal(body, &ru); err != nil {
-		return nil, fmt.Errorf("cannot parse usage response: %w", err)
+		return nil, 0, fmt.Errorf("cannot parse usage response: %w", err)
 	}
-	return &ru, nil
+	return &ru, 0, nil
+}
+
+// parseRetryAfter reads a Retry-After header, which is either a number of
+// seconds or an HTTP date. Returns seconds (0 if absent/unparseable/past).
+func parseRetryAfter(v string) int {
+	v = strings.TrimSpace(v)
+	if v == "" {
+		return 0
+	}
+	if secs, err := strconv.Atoi(v); err == nil {
+		if secs < 0 {
+			return 0
+		}
+		return secs
+	}
+	if t, err := http.ParseTime(v); err == nil {
+		if d := int(time.Until(t).Seconds()); d > 0 {
+			return d
+		}
+	}
+	return 0
 }
 
 // normalize flattens upstream into the stable Usage shape.
@@ -144,10 +173,11 @@ func normalizeWindow(w *rawWindow) *Window {
 }
 
 // errorUsage builds the normalized shape for a failure, so adapters never break.
-func errorUsage(err error, fetchedAt time.Time) *Usage {
+func errorUsage(err error, retryAfter int, fetchedAt time.Time) *Usage {
 	return &Usage{
-		FetchedAt: fetchedAt.UTC().Format(time.RFC3339),
-		Stale:     true,
-		Error:     err.Error(),
+		FetchedAt:  fetchedAt.UTC().Format(time.RFC3339),
+		Stale:      true,
+		Error:      err.Error(),
+		RetryAfter: retryAfter,
 	}
 }

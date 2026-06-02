@@ -54,6 +54,22 @@ Example body (values are illustrative):
 | `seven_day.resets_at` | RFC3339 string | when the weekly window resets |
 | `extra_usage.*` | object | pay-as-you-go credits (off here); render only when `is_enabled` |
 
+### Rate limiting (HTTP 429)
+
+The endpoint enforces its own cooldown, independent of your account's usage windows. Calling it
+too frequently returns **HTTP 429** with a `Retry-After` header (observed ~160 s). The core
+surfaces this as a normalized error with a `retry_after` field (seconds):
+
+```json
+{ "five_hour": null, "seven_day": null, "extra_usage": { "enabled": false },
+  "fetched_at": "…", "stale": true,
+  "error": "rate limited by the usage endpoint (HTTP 429) — backing off",
+  "retry_after": 161 }
+```
+
+Adapters should poll conservatively (default 5 min, 60 s floor) and, on 429, back off and honor
+`retry_after`. Running multiple host instances multiplies the call rate against the same limit.
+
 ### Notes / unknowns
 
 - The many `null` keys (`seven_day_opus`, `tangelo`, `iguana_necktie`, …) appear to be

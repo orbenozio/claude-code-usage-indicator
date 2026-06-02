@@ -37,11 +37,11 @@ func run(timeout time.Duration) *Usage {
 	fetchedAt := time.Now()
 	token, err := readAccessToken()
 	if err != nil {
-		return errorUsage(err, fetchedAt)
+		return errorUsage(err, 0, fetchedAt)
 	}
-	raw, err := fetchUsage(token, timeout)
+	raw, retryAfter, err := fetchUsage(token, timeout)
 	if err != nil {
-		return errorUsage(err, fetchedAt)
+		return errorUsage(err, retryAfter, fetchedAt)
 	}
 	return normalize(raw, fetchedAt)
 }
