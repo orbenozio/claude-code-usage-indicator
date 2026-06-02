@@ -161,6 +161,12 @@ function fetchOnce(context: vscode.ExtensionContext, done: (ok: boolean) => void
   });
 }
 
+/** "$(icon) Label" prefix for the status bar, honoring the configured label. */
+function statusPrefix(icon: string): string {
+  const label = config().get<string>('label', 'Claude').trim();
+  return label ? `$(${icon}) ${label}` : `$(${icon})`;
+}
+
 function render(usage: Usage): void {
   if (usage.error || !usage.five_hour) {
     // Degrade gracefully: show last known value muted if we have one.
@@ -176,8 +182,7 @@ function render(usage: Usage): void {
   statusItem.backgroundColor = undefined;
 
   const five = usage.five_hour;
-  const label = config().get<string>('label', 'Claude').trim();
-  const prefix = label ? `$(pulse) ${label}` : '$(pulse)';
+  const prefix = statusPrefix('pulse');
   let text = `${prefix} ${five.utilization}%`;
   if (config().get<boolean>('showWeekly', false) && usage.seven_day) {
     text = `${prefix} 5h ${five.utilization}% · 7d ${usage.seven_day.utilization}%`;
@@ -191,13 +196,14 @@ function render(usage: Usage): void {
 
 function renderStale(usage: Usage, error?: string): void {
   const five = usage.five_hour!;
-  statusItem.text = `$(history) ${five.utilization}%`;
+  statusItem.text = `${statusPrefix('history')} ${five.utilization}%`;
   statusItem.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
   statusItem.tooltip = buildTooltip(usage, true, error);
 }
 
 function renderError(message: string): void {
-  statusItem.text = '$(warning) usage';
+  const label = config().get<string>('label', 'Claude').trim();
+  statusItem.text = label ? `$(warning) ${label}` : '$(warning) usage';
   statusItem.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
   statusItem.tooltip = `Claude usage unavailable:\n${message}\n\nOpen Claude Code to refresh the token if it expired.`;
 }
