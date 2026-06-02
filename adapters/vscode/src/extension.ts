@@ -202,6 +202,12 @@ function render(usage: Usage): void {
   if (config().get<boolean>('showWeekly', false) && usage.seven_day) {
     text = `${prefix} 5h ${five.utilization}% · 7d ${usage.seven_day.utilization}%`;
   }
+  if (config().get<boolean>('showReset', false)) {
+    const d = durationParts(five.resets_at);
+    if (d && !d.ago) {
+      text += ` · ${d.span}`;
+    }
+  }
   if (five.utilization >= 90) {
     statusItem.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
   }
@@ -229,10 +235,10 @@ function buildTooltip(usage: Usage, stale: boolean, error?: string): vscode.Mark
   // force each item onto a separate line.
   const lines: string[] = ['**Claude usage**'];
   if (usage.five_hour) {
-    lines.push(`5-hour window: **${usage.five_hour.utilization}%** — resets ${untilReset(usage.five_hour.resets_at)}`);
+    lines.push(`5-hour window: **${usage.five_hour.utilization}%**${resetClause(usage.five_hour.resets_at)}`);
   }
   if (usage.seven_day) {
-    lines.push(`Weekly window: **${usage.seven_day.utilization}%** — resets ${untilReset(usage.seven_day.resets_at)}`);
+    lines.push(`Weekly window: **${usage.seven_day.utilization}%**${resetClause(usage.seven_day.resets_at)}`);
   }
   if (stale) {
     lines.push(`_Showing last known value${error ? ` (${error})` : ''}._`);
@@ -245,11 +251,15 @@ function buildTooltip(usage: Usage, stale: boolean, error?: string): vscode.Mark
   return md;
 }
 
-/** Human-friendly relative time, e.g. "in 2h 12m" or "12m ago". */
-function untilReset(iso: string): string {
+/** Parse a reset timestamp into a compact span ("2h 12m") + direction, or null
+ * if it's missing/invalid (e.g. enterprise accounts may omit the reset time). */
+function durationParts(iso: string): { span: string; ago: boolean } | null {
+  if (!iso) {
+    return null;
+  }
   const target = new Date(iso).getTime();
   if (isNaN(target)) {
-    return iso;
+    return null;
   }
   const diffMs = target - Date.now();
   const ago = diffMs < 0;
@@ -265,8 +275,21 @@ function untilReset(iso: string): string {
     parts.push(`${hrs}h`);
   }
   parts.push(`${mins}m`);
-  const span = parts.join(' ');
-  return ago ? `${span} ago` : `in ${span}`;
+  return { span: parts.join(' '), ago };
+}
+
+/** Human-friendly relative time, e.g. "in 2h 12m" or "12m ago". */
+function untilReset(iso: string): string {
+  const d = durationParts(iso);
+  if (!d) {
+    return iso;
+  }
+  return d.ago ? `${d.span} ago` : `in ${d.span}`;
+}
+
+/** " — resets in 2h 12m" when a valid reset time exists, otherwise "". */
+function resetClause(iso: string): string {
+  return durationParts(iso) ? ` — resets ${untilReset(iso)}` : '';
 }
 
 async function promptInterval(): Promise<void> {
@@ -300,6 +323,7 @@ type MenuItem = vscode.QuickPickItem & { run: () => void | Thenable<void> };
 async function showMenu(context: vscode.ExtensionContext): Promise<void> {
   const cfg = config();
   const weekly = cfg.get<boolean>('showWeekly', false);
+  const showReset = cfg.get<boolean>('showReset', false);
   const interval = cfg.get<number>('refreshIntervalSeconds', 90);
   const label = cfg.get<string>('label', 'Claude');
 
@@ -317,6 +341,11 @@ async function showMenu(context: vscode.ExtensionContext): Promise<void> {
       label: `$(eye) ${weekly ? 'Hide' : 'Show'} weekly window`,
       description: weekly ? 'on' : 'off',
       run: () => cfg.update('showWeekly', !weekly, vscode.ConfigurationTarget.Global)
+    },
+    {
+      label: `$(history) ${showReset ? 'Hide' : 'Show'} reset time`,
+      description: showReset ? 'on' : 'off',
+      run: () => cfg.update('showReset', !showReset, vscode.ConfigurationTarget.Global)
     },
     {
       label: '$(tag) Set label…',

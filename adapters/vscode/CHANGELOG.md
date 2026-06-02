@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.4
+
+- New `claudeUsage.showReset` option (and a menu toggle) to show the time until the 5-hour window
+  resets right in the status bar.
+- Don't show a dangling "resets" with no time when the account doesn't report a reset time
+  (e.g. some enterprise accounts).
+
 ## 0.1.3
 
 - **macOS:** read the token from the Keychain (`Claude Code-credentials`) when

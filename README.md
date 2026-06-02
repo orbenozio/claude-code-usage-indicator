@@ -62,6 +62,7 @@ Settings (search "Claude Usage" in VS Code settings):
 | `claudeUsage.refreshIntervalSeconds` | `300` | How often to re-check usage. The endpoint enforces its own cooldown, so values below the floor (60 s) are raised to it; on HTTP 429 the extension backs off and honors `Retry-After`. `0` = manual refresh only. |
 | `claudeUsage.label` | `"Claude"` | Short text before the percentage (e.g. `Claude Code usage`, or empty for just the number). |
 | `claudeUsage.showWeekly` | `false` | Also show the weekly (7-day) window percentage in the status bar, not just the 5-hour one. |
+| `claudeUsage.showReset` | `false` | Also show the time until the 5-hour window resets (e.g. `· 2h 12m`). Hidden automatically when the account doesn't report a reset time. |
 | `claudeUsage.corePath` | `""` | Absolute path to a `usage-core` binary. Leave empty to use the bundled one. |
 
 The refresh interval can be changed on the fly from the click menu — no window reload needed.
