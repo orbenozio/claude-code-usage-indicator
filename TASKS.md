@@ -14,12 +14,14 @@
 - [x] Tooltip: שורות נפרדות + countdown בפורמט ימים/שעות/דקות
 - [x] אימות מקצה-לקצה ב-VS Code (F5) — האינדיקטור מציג usage חי ✅
 - [x] עדכון README ל-Phase 1
+- [x] שכתוב README לידידותי-למשתמש + הוספת LICENSE (MIT)
+- [x] פרסום ל-GitHub (public): https://github.com/orbenozio/claude-code-usage-indicator
+- [x] החלטה: האינדיקטור נשאר בשורת הסטטוס — בלי הזרקה לפאנל של Claude Code
 
 ## Todo (הבא בתור)
 - [ ] אריזת `.vsix` (vsce) + בניית core לכל פלטפורמה (win/mac/linux × x64/arm64) ובחירה לפי `process.platform`
 
 ## Backlog (שלבים הבאים)
-- [ ] Phase 2 — אינדיקטור אופציונלי ליד כפתור ה-`+` ב-webview של Claude Code
 - [ ] Phase 3 — JetBrains status-bar widget
 - [ ] Phase 4 — daemon משותף (fetch/cache אחד לכל המארחים)
 - [ ] Phase 5 — אפליקציית tray לדסקטופ (Win + Mac)
