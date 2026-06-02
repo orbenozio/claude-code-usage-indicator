@@ -1,0 +1,37 @@
+# Build output
+/dist/
+/build/
+/bin/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Go
+/core/vendor/
+*.test
+*.out
+
+# Node / VS Code extension
+node_modules/
+*.vsix
+.vscode-test/
+out/
+*.tsbuildinfo
+
+# JetBrains plugin (Gradle)
+.gradle/
+/adapters/jetbrains/build/
+
+# Secrets / local fixtures — never commit a real token
+*.credentials.json
+.credentials.json
+*.token
+.env
+.env.*
+/fixtures/local/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
