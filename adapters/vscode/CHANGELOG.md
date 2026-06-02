@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.2
+
+- Fix **macOS/Linux**: the core binary unpacked from the `.vsix` lost its execute bit, so it
+  failed to run with `EACCES`. The extension now restores the execute permission before spawning.
+
 ## 0.1.1
 
 - Add an extension icon and bundle the README so the Extensions page shows details and features.

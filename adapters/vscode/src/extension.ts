@@ -126,6 +126,20 @@ function resolveCorePath(context: vscode.ExtensionContext): string {
   return context.asAbsolutePath(path.join('bin', `usage-core${ext}`));
 }
 
+/** On macOS/Linux the binary unpacked from the .vsix loses its execute bit
+ * (Windows has no such concept when packaging), so spawn fails with EACCES.
+ * Restore it before running. Best-effort; a real failure surfaces on spawn. */
+function ensureExecutable(corePath: string): void {
+  if (process.platform === 'win32') {
+    return;
+  }
+  try {
+    fs.chmodSync(corePath, 0o755);
+  } catch {
+    /* ignore — execFile will report a clear error if it still can't run */
+  }
+}
+
 /** Run the core once, render the result, and report success/failure. */
 function fetchOnce(context: vscode.ExtensionContext, done: (ok: boolean) => void): void {
   const corePath = resolveCorePath(context);
@@ -138,6 +152,7 @@ function fetchOnce(context: vscode.ExtensionContext, done: (ok: boolean) => void
     return;
   }
 
+  ensureExecutable(corePath);
   execFile(corePath, { timeout: 12000 }, (err, stdout) => {
     if (err && !stdout) {
       renderError(`failed to run core: ${err.message}`);
