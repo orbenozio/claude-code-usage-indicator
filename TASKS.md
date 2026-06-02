@@ -17,9 +17,15 @@
 - [x] שכתוב README לידידותי-למשתמש + הוספת LICENSE (MIT)
 - [x] פרסום ל-GitHub (public): https://github.com/orbenozio/claude-code-usage-indicator
 - [x] החלטה: האינדיקטור נשאר בשורת הסטטוס — בלי הזרקה לפאנל של Claude Code
+- [x] core מרובה-פלטפורמות (`scripts/build-core.ps1`) + בחירה לפי `process.platform`/`arch`
+- [x] תפריט QuickPick בלחיצה על האינדיקטור (refresh, interval, weekly, label, settings)
+- [x] טיפול ב-HTTP 429: backoff מעריכי שמכבד `Retry-After` + ברירות מחדל שפויות (5 דק', floor 60 שנ')
+- [x] תיקון: ה-label מופיע בכל המצבים (כולל stale/429)
+- [x] אריזת `.vsix` + **GitHub Release v0.1.0** עם ה-vsix מצורף
 
 ## Todo (הבא בתור)
-- [ ] אריזת `.vsix` (vsce) + בניית core לכל פלטפורמה (win/mac/linux × x64/arm64) ובחירה לפי `process.platform`
+- [ ] (אופציונלי) פרסום ל-VS Code Marketplace — דורש publisher + PAT מ-Azure DevOps
+- [ ] אימות מקצה-לקצה ב-macOS/Linux (הבינאריות ארוזות אך לא נבדקו)
 
 ## Backlog (שלבים הבאים)
 - [ ] Phase 3 — JetBrains status-bar widget
