@@ -1,12 +1,15 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -65,15 +68,17 @@ func credentialsPath() (string, error) {
 	return filepath.Join(home, ".claude", ".credentials.json"), nil
 }
 
-// readAccessToken reads the OAuth access token. Read-only: it never writes the file.
+// keychainService is the macOS Keychain item Claude Code stores its OAuth
+// credentials under (same JSON shape as the file on Windows/Linux).
+const keychainService = "Claude Code-credentials"
+
+// readAccessToken reads the OAuth access token. Read-only: it never writes
+// credentials. Prefers the file (all platforms); on macOS falls back to the
+// Keychain, which is where Claude Code stores the token by default.
 func readAccessToken() (string, error) {
-	path, err := credentialsPath()
+	data, err := readCredentialsJSON()
 	if err != nil {
 		return "", err
-	}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return "", fmt.Errorf("cannot read credentials: %w", err)
 	}
 	var c credentials
 	if err := json.Unmarshal(data, &c); err != nil {
@@ -83,6 +88,32 @@ func readAccessToken() (string, error) {
 		return "", fmt.Errorf("no accessToken in credentials")
 	}
 	return c.ClaudeAiOauth.AccessToken, nil
+}
+
+// readCredentialsJSON returns the raw credentials JSON from the file if present,
+// otherwise (on macOS) from the Keychain.
+func readCredentialsJSON() ([]byte, error) {
+	path, err := credentialsPath()
+	if err == nil {
+		if data, readErr := os.ReadFile(path); readErr == nil {
+			return data, nil
+		}
+	}
+	if runtime.GOOS == "darwin" {
+		return readKeychainCredentials()
+	}
+	return nil, fmt.Errorf("cannot read credentials: %s not found — open Claude Code to sign in", path)
+}
+
+// readKeychainCredentials shells out to the macOS `security` tool to read the
+// generic-password item Claude Code stores. Read-only.
+func readKeychainCredentials() ([]byte, error) {
+	out, err := exec.Command("/usr/bin/security",
+		"find-generic-password", "-s", keychainService, "-w").Output()
+	if err != nil {
+		return nil, fmt.Errorf("cannot read credentials from macOS Keychain (%q) — open Claude Code to sign in, and allow Keychain access if prompted", keychainService)
+	}
+	return bytes.TrimSpace(out), nil
 }
 
 // fetchUsage performs the single GET. Returns the parsed upstream body, and a

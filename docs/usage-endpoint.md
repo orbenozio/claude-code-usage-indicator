@@ -11,8 +11,11 @@ anthropic-beta: oauth-2025-04-20
 anthropic-version: 2023-06-01
 ```
 
-- `<accessToken>` comes from `claudeAiOauth.accessToken` in `~/.claude/.credentials.json`
-  (Windows/Linux). macOS storage still to be verified (Keychain).
+- `<accessToken>` comes from `claudeAiOauth.accessToken`. Source by OS:
+  - **Windows/Linux:** the file `~/.claude/.credentials.json`.
+  - **macOS:** the Keychain item `Claude Code-credentials` (generic password), read read-only via
+    `security find-generic-password -s 'Claude Code-credentials' -w`. Same JSON shape as the file.
+    The core prefers the file if present, else falls back to the Keychain.
 - **Read-only:** the core only reads the token. It never refreshes/rewrites credentials.
   Confirmed: file hash + `accessToken`/`expiresAt` unchanged before vs. after a call.
 

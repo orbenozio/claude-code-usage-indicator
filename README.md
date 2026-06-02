@@ -26,8 +26,10 @@ and when they reset) — so you never have to stop and type `/usage` again.
 
 - **VS Code** 1.85 or newer.
 - **Claude Code** installed and **logged in** at least once on this machine — the indicator reads
-  the OAuth token that Claude Code stores in `~/.claude/.credentials.json`. If you've never logged
-  in, or the token has expired, the indicator says so and asks you to open Claude Code.
+  the OAuth token Claude Code stores in `~/.claude/.credentials.json` (Windows/Linux) or the
+  **macOS Keychain** (`Claude Code-credentials`). On macOS you may be prompted once to allow
+  Keychain access. If you've never logged in, or the token has expired, the indicator says so and
+  asks you to open Claude Code.
 
 > You do **not** need Go, Node, or any other toolchain to use the extension — it ships ready to run.
 

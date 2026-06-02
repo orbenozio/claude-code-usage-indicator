@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.3
+
+- **macOS:** read the token from the Keychain (`Claude Code-credentials`) when
+  `~/.claude/.credentials.json` is absent — which is the default on macOS. You may be prompted to
+  allow Keychain access the first time.
+
 ## 0.1.2
 
 - Fix **macOS/Linux**: the core binary unpacked from the `.vsix` lost its execute bit, so it
