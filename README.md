@@ -6,9 +6,9 @@ never have to type `/usage` again.
 
 Planned to work across multiple hosts and platforms from day one:
 
-- **VS Code** — Claude Code panel (status bar first, then an optional indicator next to the `+` button).
-- **JetBrains** (Rider / IntelliJ) — native status‑bar widget.
-- **Claude Desktop** (Windows & macOS) — a small tray / menu‑bar app.
+* **VS Code** — Claude Code panel (status bar first, then an optional indicator next to the `+` button).
+* **JetBrains** (Rider / IntelliJ) — native status‑bar widget.
+* **Claude Desktop** (Windows & macOS) — a small tray / menu‑bar app.
 
 ## Architecture
 
@@ -37,26 +37,33 @@ would break Claude Code's own auth.
 
 ## Roadmap
 
-- **Phase 0** — Validation spike: confirm the endpoint + headers work with the file token, read‑only, and freeze the response schema.
-- **Phase 1** — Core + VS Code status bar (the MVP).
-- **Phase 2** — VS Code: optional indicator injected next to the `+` button.
-- **Phase 3** — JetBrains status‑bar widget.
-- **Phase 4** — Optional shared daemon (one fetch/cache across hosts).
-- **Phase 5** — Desktop tray app (Win + Mac); experimental in‑app injector behind disclaimers.
+* **Phase 0** ✅ — Validation spike: confirm the endpoint + headers work with the file token, read‑only, and freeze the response schema.
+* **Phase 1** ✅ — Core + VS Code status bar (the MVP).
+* **Phase 2** — VS Code: optional indicator injected next to the `+` button.
+* **Phase 3** — JetBrains status‑bar widget.
+* **Phase 4** — Optional shared daemon (one fetch/cache across hosts).
+* **Phase 5** — Desktop tray app (Win + Mac); experimental in‑app injector behind disclaimers.
 
 ## Configuration
 
-- **Refresh interval** — how often the indicator re-checks usage is user‑configurable per host
-  (e.g. `refreshIntervalSeconds`), with a sensible default (~90 s) and a **minimum floor**
-  (~30–60 s) to avoid hammering the endpoint and burning rate limit. `0` = manual refresh only.
-- **Instant change** — like the RTL extension's YOLO countdown, the interval can be changed on
+* **Refresh interval** — how often the indicator re-checks usage is user‑configurable per host
+  (e.g. `refreshIntervalSeconds`), with a sensible default (\~90 s) and a **minimum floor**
+  (\~30–60 s) to avoid hammering the endpoint and burning rate limit. `0` = manual refresh only.
+* **Instant change** — like the RTL extension's YOLO countdown, the interval can be changed on
   the fly (right‑click / click menu on the indicator) without reloading the window; the setting
   is only the initial default.
-- Scheduling lives in each **adapter**; the **core** only performs a single fetch when asked.
+* Scheduling lives in each **adapter**; the **core** only performs a single fetch when asked.
 
 ## Status
 
-Pre‑Phase‑0. Validating the official usage endpoint before writing the core.
+**Phase 1 (MVP) — working.** The Go core reads the token (read‑only), calls the official
+usage endpoint, and emits normalized JSON; the VS Code adapter spawns it and shows the
+5‑hour usage in the status bar with a detailed tooltip (5‑hour + weekly windows, reset
+countdowns in days/hours/minutes), click‑to‑refresh, and configurable refresh interval and
+label. Endpoint + schema are frozen in [`docs/usage-endpoint.md`](docs/usage-endpoint.md).
+
+Build/run: `go build` in `core/`, then `npm install && npm run compile` in
+`adapters/vscode/` and press **F5** (Extension Development Host).
 
 ## License
 

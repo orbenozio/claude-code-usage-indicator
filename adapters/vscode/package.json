@@ -1,0 +1,65 @@
+{
+  "name": "claude-code-usage-indicator",
+  "displayName": "Claude Code Usage Indicator",
+  "description": "Always-visible Claude usage (5-hour + weekly windows and reset times) in the VS Code status bar.",
+  "version": "0.1.0",
+  "publisher": "orben",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "claudeUsage.refresh",
+        "title": "Claude Usage: Refresh now"
+      },
+      {
+        "command": "claudeUsage.setInterval",
+        "title": "Claude Usage: Set refresh interval"
+      }
+    ],
+    "configuration": {
+      "title": "Claude Code Usage Indicator",
+      "properties": {
+        "claudeUsage.refreshIntervalSeconds": {
+          "type": "number",
+          "default": 90,
+          "minimum": 0,
+          "markdownDescription": "How often to re-check usage, in seconds. Values between 1 and the floor are raised to the floor (30 s) to avoid hammering the endpoint. `0` = manual refresh only."
+        },
+        "claudeUsage.corePath": {
+          "type": "string",
+          "default": "",
+          "description": "Absolute path to the usage-core binary. Leave empty to use the binary bundled with the extension (bin/)."
+        },
+        "claudeUsage.label": {
+          "type": "string",
+          "default": "Claude",
+          "description": "Short text shown before the percentage in the status bar (e.g. \"Claude\", \"Claude Code usage\", or empty for just the number)."
+        },
+        "claudeUsage.showWeekly": {
+          "type": "boolean",
+          "default": false,
+          "description": "Also show the weekly (7-day) window percentage in the status bar, not just the 5-hour window."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.4.0"
+  }
+}

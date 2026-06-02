@@ -1,0 +1,16 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Run Usage Indicator (VS Code adapter)",
+      "type": "extensionHost",
+      "request": "launch",
+      "args": [
+        "--extensionDevelopmentPath=${workspaceFolder}/adapters/vscode"
+      ],
+      "outFiles": [
+        "${workspaceFolder}/adapters/vscode/out/**/*.js"
+      ]
+    }
+  ]
+}
