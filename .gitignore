@@ -31,6 +31,9 @@ out/
 .env.*
 /fixtures/local/
 
+# Claude / Agents hub — machine-specific junctions, not part of the project
+.claude/
+
 # OS
 .DS_Store
 Thumbs.db

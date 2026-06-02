@@ -44,6 +44,16 @@ would break Claude Code's own auth.
 - **Phase 4** — Optional shared daemon (one fetch/cache across hosts).
 - **Phase 5** — Desktop tray app (Win + Mac); experimental in‑app injector behind disclaimers.
 
+## Configuration
+
+- **Refresh interval** — how often the indicator re-checks usage is user‑configurable per host
+  (e.g. `refreshIntervalSeconds`), with a sensible default (~90 s) and a **minimum floor**
+  (~30–60 s) to avoid hammering the endpoint and burning rate limit. `0` = manual refresh only.
+- **Instant change** — like the RTL extension's YOLO countdown, the interval can be changed on
+  the fly (right‑click / click menu on the indicator) without reloading the window; the setting
+  is only the initial default.
+- Scheduling lives in each **adapter**; the **core** only performs a single fetch when asked.
+
 ## Status
 
 Pre‑Phase‑0. Validating the official usage endpoint before writing the core.
