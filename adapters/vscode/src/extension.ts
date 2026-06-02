@@ -82,14 +82,87 @@ function startLoop(context: vscode.ExtensionContext) {
   tick(context);
 }
 
-/** One fetch + schedule the next, applying exponential backoff on failure. */
-function tick(context: vscode.ExtensionContext) {
+const CACHE_NAME = 'usage-cache.json';
+/** How long a "fetch in progress" claim is honored before another window may try. */
+const FETCH_LOCK_MS = 25000;
+
+interface CacheFile {
+  usage?: Usage;
+  fetchedAt?: number;      // ms — when the cached usage was fetched
+  fetchStartedAt?: number; // ms — when some window last began a network fetch (stampede lock)
+}
+
+/** Shared across all VS Code windows of this machine (per-extension global storage). */
+function cachePath(context: vscode.ExtensionContext): string {
+  return path.join(context.globalStorageUri.fsPath, CACHE_NAME);
+}
+
+function readCache(context: vscode.ExtensionContext): CacheFile {
+  try {
+    return JSON.parse(fs.readFileSync(cachePath(context), 'utf8')) as CacheFile;
+  } catch {
+    return {};
+  }
+}
+
+function writeCache(context: vscode.ExtensionContext, patch: CacheFile): void {
+  try {
+    fs.mkdirSync(context.globalStorageUri.fsPath, { recursive: true });
+    const merged = { ...readCache(context), ...patch };
+    const tmp = cachePath(context) + '.tmp';
+    fs.writeFileSync(tmp, JSON.stringify(merged));
+    fs.renameSync(tmp, cachePath(context)); // atomic-ish swap so readers never see a partial file
+  } catch {
+    /* cache is best-effort */
+  }
+}
+
+/** ±15% jitter so multiple windows don't align their polls. */
+function jitter(ms: number): number {
+  return Math.max(1000, Math.round(ms * (0.85 + Math.random() * 0.3)));
+}
+
+function scheduleAfter(context: vscode.ExtensionContext, delay: number): void {
+  timer = setTimeout(() => tick(context), delay);
+}
+
+/** One cycle. To avoid N windows hammering the endpoint (HTTP 429), windows
+ * share a cache: a fresh cache is rendered without any network call, and only
+ * one window fetches per interval (guarded by a cross-window lock). */
+function tick(context: vscode.ExtensionContext): void {
   if (timer) {
     clearTimeout(timer);
     timer = undefined;
   }
-  fetchOnce(context, (ok) => {
-    const base = baseIntervalMs();
+  const base = baseIntervalMs();
+  const now = Date.now();
+  const cache = readCache(context);
+
+  // 1) Fresh shared cache → render it, no network call.
+  if (cache.usage && cache.fetchedAt && base > 0 && now - cache.fetchedAt < base) {
+    render(cache.usage);
+    backoff = 0;
+    scheduleAfter(context, jitter(base - (now - cache.fetchedAt) + 1000));
+    return;
+  }
+
+  // 2) Another window is fetching right now → show cache, re-check shortly.
+  if (cache.fetchStartedAt && now - cache.fetchStartedAt < FETCH_LOCK_MS) {
+    if (cache.usage) {
+      render(cache.usage);
+    }
+    scheduleAfter(context, jitter(FETCH_LOCK_MS));
+    return;
+  }
+
+  // 3) We do the fetch. Claim the lock first so sibling windows back off.
+  writeCache(context, { fetchStartedAt: now });
+  fetchOnce(context, (ok, usage) => {
+    if (ok && usage) {
+      writeCache(context, { usage, fetchedAt: Date.now(), fetchStartedAt: 0 });
+    } else {
+      writeCache(context, { fetchStartedAt: 0 }); // release lock, keep last good cache
+    }
     if (base <= 0) {
       return; // manual-only: don't auto-reschedule
     }
@@ -104,7 +177,7 @@ function tick(context: vscode.ExtensionContext) {
         delay = Math.min(lastRetryAfterMs, MAX_BACKOFF_MS);
       }
     }
-    timer = setTimeout(() => tick(context), delay);
+    scheduleAfter(context, jitter(delay));
   });
 }
 
@@ -140,8 +213,11 @@ function ensureExecutable(corePath: string): void {
   }
 }
 
-/** Run the core once, render the result, and report success/failure. */
-function fetchOnce(context: vscode.ExtensionContext, done: (ok: boolean) => void): void {
+/** Run the core once, render the result, and report success + the parsed usage. */
+function fetchOnce(
+  context: vscode.ExtensionContext,
+  done: (ok: boolean, usage?: Usage) => void
+): void {
   const corePath = resolveCorePath(context);
   if (!fs.existsSync(corePath)) {
     statusItem.text = '$(error) usage';
@@ -172,7 +248,7 @@ function fetchOnce(context: vscode.ExtensionContext, done: (ok: boolean) => void
     lastRetryAfterMs = (usage.retry_after ?? 0) * 1000;
     const ok = !usage.error && !!usage.five_hour;
     render(usage);
-    done(ok);
+    done(ok, usage);
   });
 }
 

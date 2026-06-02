@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.6
+
+- **Fix repeated HTTP 429 with multiple windows open.** All VS Code windows now share one cached
+  result (per machine) and only one window calls the endpoint per interval, guarded by a
+  cross-window lock and polling jitter. Many open windows no longer compound into a permanent
+  rate-limit.
+
 ## 0.1.5
 
 - Polished the extension page: badges, a richer Features list, a Resources section, and a gallery
