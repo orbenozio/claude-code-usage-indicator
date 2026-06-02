@@ -10,6 +10,15 @@
   "categories": [
     "Other"
   ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/orbenozio/claude-code-usage-indicator.git"
+  },
+  "bugs": {
+    "url": "https://github.com/orbenozio/claude-code-usage-indicator/issues"
+  },
+  "homepage": "https://github.com/orbenozio/claude-code-usage-indicator#readme",
+  "license": "MIT",
   "activationEvents": [
     "onStartupFinished"
   ],

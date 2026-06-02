@@ -18,6 +18,10 @@ node_modules/
 .vscode-test/
 out/
 *.tsbuildinfo
+# LICENSE is copied into the extension folder at package time
+/adapters/vscode/LICENSE
+# Built core binaries are bundled into the .vsix at package time, never committed
+/adapters/vscode/bin/
 
 # JetBrains plugin (Gradle)
 .gradle/

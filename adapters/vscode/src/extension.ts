@@ -69,14 +69,22 @@ function scheduleTimer(context: vscode.ExtensionContext) {
   timer = setInterval(() => refresh(context), seconds * 1000);
 }
 
-/** Resolve the core binary: explicit config first, else the bundled bin/. */
+/** Resolve the core binary: explicit config first, then the bundled per-platform
+ * binary (usage-core-<platform>-<arch>[.exe]), then a generic dev fallback. */
 function resolveCorePath(context: vscode.ExtensionContext): string {
   const configured = config().get<string>('corePath', '').trim();
   if (configured) {
     return configured;
   }
-  const binName = process.platform === 'win32' ? 'usage-core.exe' : 'usage-core';
-  return context.asAbsolutePath(path.join('bin', binName));
+  const ext = process.platform === 'win32' ? '.exe' : '';
+  const specific = context.asAbsolutePath(
+    path.join('bin', `usage-core-${process.platform}-${process.arch}${ext}`)
+  );
+  if (fs.existsSync(specific)) {
+    return specific;
+  }
+  // Dev fallback: a single locally-built binary named generically.
+  return context.asAbsolutePath(path.join('bin', `usage-core${ext}`));
 }
 
 function refresh(context: vscode.ExtensionContext): void {
