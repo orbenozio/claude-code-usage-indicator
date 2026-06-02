@@ -2,9 +2,13 @@
   "name": "claude-code-usage-indicator",
   "displayName": "Claude Code Usage Indicator",
   "description": "Always-visible Claude usage (5-hour + weekly windows and reset times) in the VS Code status bar.",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "publisher": "orben",
   "icon": "icon.png",
+  "galleryBanner": {
+    "color": "#D97757",
+    "theme": "dark"
+  },
   "engines": {
     "vscode": "^1.85.0"
   },

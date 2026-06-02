@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.5
+
+- Polished the extension page: badges, a richer Features list, a Resources section, and a gallery
+  banner. No functional changes.
+
 ## 0.1.4
 
 - New `claudeUsage.showReset` option (and a menu toggle) to show the time until the 5-hour window
