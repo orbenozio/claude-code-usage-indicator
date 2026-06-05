@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.9
+
+- Group the 5-hour reset time next to the 5-hour percentage (with a clock icon) so it is no longer
+  ambiguous when the weekly window is also shown.
+- Color the status bar orange at >= 90% and red at 100% (based on whichever shown window is highest).
+
 ## 0.1.8
 
 - Fix "Refresh now" not updating the value or timestamp. After the shared cache was added, manual

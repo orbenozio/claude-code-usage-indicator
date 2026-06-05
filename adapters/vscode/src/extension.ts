@@ -288,24 +288,32 @@ function render(usage: Usage): void {
   }
 
   lastGood = usage;
-  statusItem.backgroundColor = undefined;
 
   const five = usage.five_hour;
-  const prefix = statusPrefix('pulse');
-  let text = `${prefix} ${five.utilization}%`;
-  if (config().get<boolean>('showWeekly', false) && usage.seven_day) {
-    text = `${prefix} 5h ${five.utilization}% · 7d ${usage.seven_day.utilization}%`;
+  const weekly = config().get<boolean>('showWeekly', false) ? usage.seven_day : null;
+  const reset = config().get<boolean>('showReset', false) ? durationParts(five.resets_at) : null;
+
+  // Keep the 5-hour window and its reset time together; a clock icon ties them
+  // so the time is clearly the 5h reset and not part of the weekly readout.
+  let fiveText = `${weekly ? '5h ' : ''}${five.utilization}%`;
+  if (reset && !reset.ago) {
+    fiveText += ` $(watch) ${reset.span}`;
   }
-  if (config().get<boolean>('showReset', false)) {
-    const d = durationParts(five.resets_at);
-    if (d && !d.ago) {
-      text += ` · ${d.span}`;
-    }
-  }
-  if (five.utilization >= 90) {
-    statusItem.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
+  let text = `${statusPrefix('pulse')} ${fiveText}`;
+  if (weekly) {
+    text += ` · 7d ${weekly.utilization}%`;
   }
   statusItem.text = text;
+
+  // Warn as you approach the cap (orange ≥ 90%, red when maxed).
+  const peak = Math.max(five.utilization, weekly ? weekly.utilization : 0);
+  if (peak >= 100) {
+    statusItem.backgroundColor = new vscode.ThemeColor('statusBarItem.errorBackground');
+  } else if (peak >= 90) {
+    statusItem.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
+  } else {
+    statusItem.backgroundColor = undefined;
+  }
   statusItem.tooltip = buildTooltip(usage, false);
 }
 
