@@ -27,7 +27,9 @@ const MAX_BACKOFF_MS = 15 * 60 * 1000;
 
 let statusItem: vscode.StatusBarItem;
 let timer: NodeJS.Timeout | undefined;
+let uiTimer: NodeJS.Timeout | undefined; // repaints relative times without re-fetching
 let lastGood: Usage | undefined;
+let displayed: { usage: Usage; stale: boolean; error?: string } | undefined;
 let backoff = 0;            // consecutive failures
 let lastRetryAfterMs = 0;   // honored when the endpoint sends Retry-After
 
@@ -50,11 +52,30 @@ export function activate(context: vscode.ExtensionContext) {
   );
 
   startLoop(context);
+  // Repaint the visible text every 30 s so relative times ("3m ago") and reset
+  // countdowns stay current between network refreshes. No fetching here.
+  uiTimer = setInterval(repaint, 30000);
 }
 
 export function deactivate() {
   if (timer) {
     clearTimeout(timer);
+  }
+  if (uiTimer) {
+    clearInterval(uiTimer);
+  }
+}
+
+/** Re-render the last shown usage from memory (no network), keeping relative
+ * times and countdowns fresh. */
+function repaint(): void {
+  if (!displayed) {
+    return;
+  }
+  if (displayed.stale) {
+    renderStale(displayed.usage, displayed.error);
+  } else {
+    render(displayed.usage);
   }
 }
 
@@ -288,6 +309,7 @@ function render(usage: Usage): void {
   }
 
   lastGood = usage;
+  displayed = { usage, stale: false };
 
   const five = usage.five_hour;
   const weekly = config().get<boolean>('showWeekly', false) ? usage.seven_day : null;
@@ -318,6 +340,7 @@ function render(usage: Usage): void {
 }
 
 function renderStale(usage: Usage, error?: string): void {
+  displayed = { usage, stale: true, error };
   const five = usage.five_hour!;
   statusItem.text = `${statusPrefix('history')} ${five.utilization}%`;
   statusItem.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
@@ -325,6 +348,7 @@ function renderStale(usage: Usage, error?: string): void {
 }
 
 function renderError(message: string): void {
+  displayed = undefined; // static message, nothing time-relative to repaint
   const label = config().get<string>('label', 'Claude').trim();
   statusItem.text = label ? `$(warning) ${label}` : '$(warning) usage';
   statusItem.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
@@ -343,11 +367,11 @@ function buildTooltip(usage: Usage, stale: boolean, error?: string): vscode.Mark
     lines.push(`Weekly window: **${usage.seven_day.utilization}%**${resetClause(usage.seven_day.resets_at)}`);
   }
   if (stale) {
-    lines.push(`_Showing last known value (from ${formatClock(usage.fetched_at)})${error ? ` — ${error}` : ''}._`);
+    lines.push(`_Showing last known value (updated ${agoText(usage.fetched_at)})${error ? ` - ${error}` : ''}._`);
   } else {
-    lines.push(`_Updated at ${formatClock(usage.fetched_at)}._`);
+    lines.push(`_Updated ${agoText(usage.fetched_at)}._`);
   }
-  lines.push('Click for options (refresh, interval, …).');
+  lines.push('Click for options (refresh, interval, ...).');
   const md = new vscode.MarkdownString(lines.join('\n\n'));
   md.isTrusted = false;
   return md;
@@ -394,14 +418,14 @@ function resetClause(iso: string): string {
   return durationParts(iso) ? ` — resets ${untilReset(iso)}` : '';
 }
 
-/** Local wall-clock time of an ISO timestamp, e.g. "14:32". Absolute so it stays
- * correct even though the tooltip is only rebuilt on refresh, not live. */
-function formatClock(iso: string): string {
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) {
+/** Relative age of a timestamp for the tooltip, e.g. "just now" or "3m ago".
+ * The UI is repainted every ~30 s so this stays current between refreshes. */
+function agoText(iso: string): string {
+  const d = durationParts(iso);
+  if (!d) {
     return iso;
   }
-  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  return d.span === '0m' ? 'just now' : `${d.span} ago`;
 }
 
 async function promptInterval(): Promise<void> {

@@ -5,6 +5,8 @@
 - Group the 5-hour reset time next to the 5-hour percentage (with a clock icon) so it is no longer
   ambiguous when the weekly window is also shown.
 - Color the status bar orange at >= 90% and red at 100% (based on whichever shown window is highest).
+- Tooltip shows "Updated 3m ago" (relative) again, and now stays current: the text is repainted
+  every 30 seconds without a network call, so the age and reset countdowns keep ticking.
 
 ## 0.1.8
 
