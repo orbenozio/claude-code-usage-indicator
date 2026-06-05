@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.7
+
+- Tooltip "Updated" now shows the actual clock time it was last refreshed (e.g. "Updated at 14:32")
+  instead of a relative time that always read "0m ago" because it was computed right after each
+  fetch and never updated live.
+
 ## 0.1.6
 
 - **Fix repeated HTTP 429 with multiple windows open.** All VS Code windows now share one cached

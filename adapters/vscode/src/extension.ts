@@ -317,9 +317,9 @@ function buildTooltip(usage: Usage, stale: boolean, error?: string): vscode.Mark
     lines.push(`Weekly window: **${usage.seven_day.utilization}%**${resetClause(usage.seven_day.resets_at)}`);
   }
   if (stale) {
-    lines.push(`_Showing last known value${error ? ` (${error})` : ''}._`);
+    lines.push(`_Showing last known value (from ${formatClock(usage.fetched_at)})${error ? ` — ${error}` : ''}._`);
   } else {
-    lines.push(`_Updated ${untilReset(usage.fetched_at)}._`);
+    lines.push(`_Updated at ${formatClock(usage.fetched_at)}._`);
   }
   lines.push('Click for options (refresh, interval, …).');
   const md = new vscode.MarkdownString(lines.join('\n\n'));
@@ -366,6 +366,16 @@ function untilReset(iso: string): string {
 /** " — resets in 2h 12m" when a valid reset time exists, otherwise "". */
 function resetClause(iso: string): string {
   return durationParts(iso) ? ` — resets ${untilReset(iso)}` : '';
+}
+
+/** Local wall-clock time of an ISO timestamp, e.g. "14:32". Absolute so it stays
+ * correct even though the tooltip is only rebuilt on refresh, not live. */
+function formatClock(iso: string): string {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) {
+    return iso;
+  }
+  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
 async function promptInterval(): Promise<void> {
