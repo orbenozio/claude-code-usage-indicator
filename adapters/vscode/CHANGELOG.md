@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.8
+
+- Fix "Refresh now" not updating the value or timestamp. After the shared cache was added, manual
+  refresh re-rendered the cached value; it now forces a real fetch (bypassing the cache) so the
+  data and the "Updated at" time actually change.
+
 ## 0.1.7
 
 - Tooltip "Updated" now shows the actual clock time it was last refreshed (e.g. "Updated at 14:32")

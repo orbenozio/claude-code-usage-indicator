@@ -40,7 +40,7 @@ export function activate(context: vscode.ExtensionContext) {
 
   context.subscriptions.push(
     vscode.commands.registerCommand('claudeUsage.menu', () => showMenu(context)),
-    vscode.commands.registerCommand('claudeUsage.refresh', () => startLoop(context)),
+    vscode.commands.registerCommand('claudeUsage.refresh', () => forceRefresh(context)),
     vscode.commands.registerCommand('claudeUsage.setInterval', () => promptInterval()),
     vscode.workspace.onDidChangeConfiguration((e) => {
       if (e.affectsConfiguration('claudeUsage')) {
@@ -155,14 +155,32 @@ function tick(context: vscode.ExtensionContext): void {
     return;
   }
 
-  // 3) We do the fetch. Claim the lock first so sibling windows back off.
-  writeCache(context, { fetchStartedAt: now });
+  // 3) No fresh cache and nobody else fetching -> we fetch.
+  fetchAndCache(context);
+}
+
+/** Manual "Refresh now": always do a real fetch, bypassing the shared cache, so
+ * the displayed value and its timestamp actually update. Then resume the loop. */
+function forceRefresh(context: vscode.ExtensionContext): void {
+  if (timer) {
+    clearTimeout(timer);
+    timer = undefined;
+  }
+  backoff = 0;
+  lastRetryAfterMs = 0;
+  fetchAndCache(context);
+}
+
+/** Claim the cross-window lock, run the core, cache a good result, reschedule. */
+function fetchAndCache(context: vscode.ExtensionContext): void {
+  writeCache(context, { fetchStartedAt: Date.now() });
   fetchOnce(context, (ok, usage) => {
     if (ok && usage) {
       writeCache(context, { usage, fetchedAt: Date.now(), fetchStartedAt: 0 });
     } else {
       writeCache(context, { fetchStartedAt: 0 }); // release lock, keep last good cache
     }
+    const base = baseIntervalMs();
     if (base <= 0) {
       return; // manual-only: don't auto-reschedule
     }
@@ -416,7 +434,7 @@ async function showMenu(context: vscode.ExtensionContext): Promise<void> {
   const items: MenuItem[] = [
     {
       label: '$(sync) Refresh now',
-      run: () => startLoop(context)
+      run: () => forceRefresh(context)
     },
     {
       label: '$(clock) Set refresh interval…',
